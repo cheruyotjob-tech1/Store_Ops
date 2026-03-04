@@ -4,6 +4,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 st.set_page_config(page_title="Store Traffic Dashboard", layout="wide")
+# Hide Streamlit header/menu
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+"""
 
 st.title("📊 Store Traffic & Till Analytics")
 
@@ -109,3 +117,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload your rk.csv file to begin.")
+
