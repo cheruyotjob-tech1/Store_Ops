@@ -3,182 +3,109 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ----------------------------------------
-# Page Config
-# ----------------------------------------
 st.set_page_config(page_title="Store Traffic Dashboard", layout="wide")
 
-st.title("📊 Store Traffic & Till Performance Dashboard")
+st.title("📊 Store Traffic & Till Analytics")
 
-# ----------------------------------------
-# Cache Data Loading
-# ----------------------------------------
-@st.cache_data
-def load_and_clean_data(uploaded_file):
+# -----------------------------
+# Upload CSV
+# -----------------------------
+uploaded_file = st.file_uploader("Upload rk.csv file", type=["csv"])
+
+if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
-    # Drop unwanted columns (based on your structure)
+    # -----------------------------
+    # Clean Data (Same Logic as Yours)
+    # -----------------------------
     cols_to_delete = list(range(0, 10)) + list(range(18, 22))
     df_cleaned = df.drop(df.columns[cols_to_delete], axis=1)
 
-    # Rename columns
     new_names = ["Date", "Till", "Session", "Rct", "Customer", "Total", "Loyalty", "Cashier"]
     df_cleaned.columns = new_names
 
-    # Convert types
     df_cleaned['Date'] = pd.to_datetime(df_cleaned['Date'], dayfirst=True, errors='coerce')
     df_cleaned['Total'] = df_cleaned['Total'].astype(str).str.replace(',', '').astype(float)
 
     df_cleaned = df_cleaned.dropna(subset=['Date'])
 
-    return df_cleaned
-
-
-# ----------------------------------------
-# File Upload
-# ----------------------------------------
-uploaded_file = st.file_uploader("Upload rk.csv file", type=["csv"])
-
-if uploaded_file is not None:
-
-    df_cleaned = load_and_clean_data(uploaded_file)
-
-    # ----------------------------------------
+    # -----------------------------
     # Sidebar Filters
-    # ----------------------------------------
+    # -----------------------------
     min_date = df_cleaned['Date'].min().date()
     max_date = df_cleaned['Date'].max().date()
 
     st.sidebar.header("Filters")
 
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
+    start_date = st.sidebar.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
+    end_date = st.sidebar.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
 
-    hour_range = st.sidebar.slider(
-        "Select Hour Range",
-        0, 23, (0, 23)
-    )
+    start_hour = st.sidebar.slider("Start Hour", 0, 23, 0)
+    end_hour = st.sidebar.slider("End Hour", 0, 23, 23)
 
-    start_date, end_date = date_range
-    start_hour, end_hour = hour_range
-
-    # ----------------------------------------
+    # -----------------------------
     # Filter Data
-    # ----------------------------------------
+    # -----------------------------
     df_filtered = df_cleaned[
         (df_cleaned['Date'].dt.date >= start_date) &
         (df_cleaned['Date'].dt.date <= end_date)
     ].copy()
 
-    df_filtered = df_filtered[
-        (df_filtered['Date'].dt.hour >= start_hour) &
-        (df_filtered['Date'].dt.hour <= end_hour)
-    ]
-
     if df_filtered.empty:
-        st.warning("No data available for selected filters.")
+        st.warning("No data for selected date range")
     else:
         df_filtered['Day'] = df_filtered['Date'].dt.date
 
-        # ----------------------------------------
-        # Daily Metrics
-        # ----------------------------------------
-        daily_metrics = df_filtered.groupby('Day').agg(
-            Max_Tills=('Till', 'nunique'),
-            Average_Till_Number=('Till', 'mean'),
-            Total_Transactions=('Till', 'size')
-        ).reset_index()
+        daily_max_tills = df_filtered.groupby('Day')['Till'].nunique().reset_index(name='Max_Tills')
 
-        duration = max((end_hour - start_hour + 1), 1)
+        df_time = df_filtered[
+            (df_filtered['Date'].dt.hour >= start_hour) &
+            (df_filtered['Date'].dt.hour <= end_hour)
+        ].copy()
 
-        daily_metrics['Customers_Per_Till_Per_Hour'] = (
-            daily_metrics['Total_Transactions'] /
-            (daily_metrics['Max_Tills'] * duration)
-        )
+        if not df_time.empty:
+            daily_metrics = df_time.groupby('Day').agg(
+                Average_Till_Number=('Till', 'mean'),
+                Active_Tills=('Till', 'nunique'),
+                Daily_Rows_Count=('Till', 'size')
+            ).reset_index()
 
-        # ----------------------------------------
-        # KPI CARDS
-        # ----------------------------------------
-        col1, col2, col3 = st.columns(3)
+            duration = max((end_hour - start_hour + 1), 1)
 
-        col1.metric("Max Tills (Peak Day)", daily_metrics['Max_Tills'].max())
-        col2.metric("Average Tills Used", round(daily_metrics['Max_Tills'].mean(), 2))
-        col3.metric("Avg Customers/Till/Hour",
-                    round(daily_metrics['Customers_Per_Till_Per_Hour'].mean(), 2))
+            daily_metrics['Customers_Per_Till'] = (
+                daily_metrics['Daily_Rows_Count'] /
+                (daily_metrics['Active_Tills'] * duration)
+            )
+        else:
+            daily_metrics = pd.DataFrame()
 
-        st.divider()
+        daily_plot_df = pd.merge(daily_max_tills, daily_metrics, on='Day', how='left')
+        daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
-        # ----------------------------------------
-        # ENHANCED PLOT
-        # ----------------------------------------
+        # -----------------------------
+        # Plot
+        # -----------------------------
         fig, ax = plt.subplots(figsize=(14, 6))
 
-        sns.lineplot(
-            data=daily_metrics,
-            x='Day',
-            y='Max_Tills',
-            marker='o',
-            linewidth=2,
-            label='Max Tills',
-            ax=ax
-        )
+        sns.lineplot(data=daily_plot_df, x='Day', y='Max_Tills', label='Max Tills', ax=ax)
+        sns.lineplot(data=daily_plot_df, x='Day', y='Average_Till_Number', label='Average Till', ax=ax)
+        sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills (Filtered Hours)', ax=ax)
+        sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till per Hour', ax=ax)
 
-        sns.lineplot(
-            data=daily_metrics,
-            x='Day',
-            y='Customers_Per_Till_Per_Hour',
-            marker='o',
-            linewidth=2,
-            label='Customers per Till per Hour',
-            ax=ax
-        )
-
-        # Add labels to every point
-        for i in range(len(daily_metrics)):
-            ax.text(
-                daily_metrics['Day'].iloc[i],
-                daily_metrics['Max_Tills'].iloc[i],
-                round(daily_metrics['Max_Tills'].iloc[i], 2),
-                fontsize=8,
-                ha='right'
-            )
-
-            ax.text(
-                daily_metrics['Day'].iloc[i],
-                daily_metrics['Customers_Per_Till_Per_Hour'].iloc[i],
-                round(daily_metrics['Customers_Per_Till_Per_Hour'].iloc[i], 2),
-                fontsize=8,
-                ha='left'
-            )
-
-        ax.set_title(
-            f"Till Performance ({start_hour}:00 - {end_hour}:00)",
-            fontsize=14,
-            fontweight='bold'
-        )
-
-        ax.set_xlabel("Date", fontsize=12)
-        ax.set_ylabel("Value", fontsize=12)
-
+        ax.set_title(f"Daily Till Metrics ({start_hour}:00 - {end_hour}:00)")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Metric Value")
         plt.xticks(rotation=45)
-
-        # Strong grid
-        ax.grid(True, which='both', linestyle='--', linewidth=0.7, alpha=0.7)
-
-        ax.legend()
+        plt.grid(True, linestyle='--', alpha=0.5)
         plt.tight_layout()
 
         st.pyplot(fig)
 
-        # ----------------------------------------
-        # Data Table
-        # ----------------------------------------
-        st.subheader("📋 Daily Metrics Table")
-        st.dataframe(daily_metrics, use_container_width=True)
+        # -----------------------------
+        # Show Data
+        # -----------------------------
+        st.subheader("Daily Metrics Table")
+        st.dataframe(daily_plot_df, use_container_width=True)
 
 else:
-    st.info("Upload your rk.csv file to begin analysis.")
+    st.info("Please upload your rk.csv file to begin.")
