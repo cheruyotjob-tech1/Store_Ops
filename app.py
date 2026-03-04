@@ -60,7 +60,6 @@ if uploaded_file is not None:
         st.warning("No data for selected date range")
     else:
         df_filtered['Day'] = df_filtered['Date'].dt.date
-
         daily_max_tills = df_filtered.groupby('Day')['Till'].nunique().reset_index(name='Max_Tills')
 
         df_time = df_filtered[
@@ -86,14 +85,29 @@ if uploaded_file is not None:
         daily_plot_df = pd.merge(daily_max_tills, daily_metrics, on='Day', how='left')
         daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
+        # Calculate Waiting Time
+        daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 50
+
+        # Round numbers for clean display
+        daily_plot_df['Customers_Per_Till'] = daily_plot_df['Customers_Per_Till'].round(2)
+        daily_plot_df['Waiting_Time'] = daily_plot_df['Waiting_Time'].round(2)
+        # Optional: round others if desired
+        # daily_plot_df['Average_Till_Number'] = daily_plot_df['Average_Till_Number'].round(1)
+
         # -----------------------------
         # Main Plot: Daily Till Metrics
         # -----------------------------
         fig, ax = plt.subplots(figsize=(14, 6))
+
         sns.lineplot(data=daily_plot_df, x='Day', y='Max_Tills', label='Max Tills', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Average_Till_Number', label='Average Till', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills (Filtered Hours)', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till per Hour', ax=ax)
+        sns.lineplot(
+            data=daily_plot_df, x='Day', y='Waiting_Time',
+            label='Est. Waiting Time (min)',
+            linestyle='--', linewidth=2.5, marker='o', ax=ax
+        )
 
         ax.set_title(f"Daily Till Metrics ({start_hour}:00 - {end_hour}:00)")
         ax.set_xlabel("Date")
@@ -109,15 +123,27 @@ if uploaded_file is not None:
         plt.tight_layout()
         st.pyplot(fig)
 
+        # -----------------------------
+        # Table with formatting
+        # -----------------------------
         st.subheader("Daily Till Metrics Table")
-        st.dataframe(daily_plot_df, use_container_width=True)
+
+        styled_df = daily_plot_df.style.format({
+            'Max_Tills': '{:.0f}',
+            'Average_Till_Number': '{:.1f}',
+            'Active_Tills': '{:.0f}',
+            'Customers_Per_Till': '{:.2f}',
+            'Waiting_Time': '{:.2f}'
+        })
+
+        st.dataframe(styled_df, use_container_width=True)
 
         # -----------------------------
         # Loyalty Analysis - Filtered by selected dates
         # -----------------------------
         st.subheader("Loyalty Customer Insights")
-
         df_loyalty = df_filtered[df_filtered['Loyalty'].isin(['þ', 'o'])].copy()
+
         if df_loyalty.empty:
             st.info("No loyalty data (þ or o) in the selected date range.")
         else:
@@ -139,11 +165,10 @@ if uploaded_file is not None:
             daily_customer_counts = df_loyalty.groupby(['Day', 'Loyalty_Category']).size().reset_index(name='Transaction_Count')
             daily_customer_counts['Day'] = pd.to_datetime(daily_customer_counts['Day'])
 
-            # Display two plots side by side using columns
+            # Display two plots side by side
             col1, col2 = st.columns(2)
 
             with col1:
-                # Bar plot: Average Spending
                 fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
                 sns.barplot(x='Category', y='Average_Spending', data=plot_data, palette='viridis', ax=ax_bar)
                 ax_bar.set_title('Average Spending by Loyalty Category', fontsize=14)
@@ -155,7 +180,6 @@ if uploaded_file is not None:
                 st.pyplot(fig_bar)
 
             with col2:
-                # Bar plot: Daily Transactions by Loyalty
                 fig_daily, ax_daily = plt.subplots(figsize=(8, 5))
                 sns.barplot(data=daily_customer_counts, x='Day', y='Transaction_Count', hue='Loyalty_Category', ax=ax_daily)
                 ax_daily.set_title('Daily Transactions by Loyalty Category', fontsize=14)
@@ -165,10 +189,6 @@ if uploaded_file is not None:
                 plt.legend(title='Category')
                 plt.tight_layout()
                 st.pyplot(fig_daily)
-
-            # Optional: Show loyalty table if needed
-            # st.subheader("Daily Loyalty Transaction Counts")
-            # st.dataframe(daily_customer_counts, use_container_width=True)
 
 else:
     st.info("Please upload your rk.csv file to begin.")
