@@ -9,7 +9,7 @@ st.set_page_config(page_title="Store Traffic Dashboard", layout="wide")
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
-header {visibility: hidden;}
+
 footer {visibility: hidden;}
 </style>
 """
@@ -125,3 +125,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload your rk.csv file to begin.")
+
