@@ -106,7 +106,12 @@ if uploaded_file is not None:
         ax.set_xlabel("Date")
         ax.set_ylabel("Metric Value")
         plt.xticks(rotation=45)
-        plt.grid(True, linestyle='--', alpha=0.5)
+        
+        # Enhanced gridlines for X and Y axes
+        ax.grid(True, which='major', linestyle='-', linewidth=0.8, alpha=0.6, color='gray')
+        ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.3, color='lightgray')
+        ax.minorticks_on()
+        
         plt.tight_layout()
 
         st.pyplot(fig)
@@ -119,5 +124,3 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload your rk.csv file to begin.")
-
-
