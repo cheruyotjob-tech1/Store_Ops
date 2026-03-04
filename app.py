@@ -107,10 +107,11 @@ if uploaded_file is not None:
         ax.set_ylabel("Metric Value")
         plt.xticks(rotation=45)
         
-        # Enhanced gridlines for X and Y axes
-        ax.grid(True, which='major', linestyle='-', linewidth=0.8, alpha=0.6, color='gray')
-        ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.3, color='lightgray')
+        # Enhanced gridlines that cut through the plot area
+        ax.grid(True, which='major', linestyle='-', linewidth=1.0, alpha=0.7, color='gray', zorder=0)
+        ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.4, color='lightgray', zorder=0)
         ax.minorticks_on()
+        ax.set_axisbelow(True)
         
         plt.tight_layout()
 
