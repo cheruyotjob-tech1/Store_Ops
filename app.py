@@ -87,111 +87,139 @@ if uploaded_file is not None:
 
         # Calculate Waiting Time
         daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 40
-
-        # Round numbers for clean display
         daily_plot_df['Customers_Per_Till'] = daily_plot_df['Customers_Per_Till'].round(2)
         daily_plot_df['Waiting_Time'] = daily_plot_df['Waiting_Time'].round(2)
-        # Optional: round others if desired
-        # daily_plot_df['Average_Till_Number'] = daily_plot_df['Average_Till_Number'].round(1)
 
         # -----------------------------
         # Main Plot: Daily Till Metrics
         # -----------------------------
         fig, ax = plt.subplots(figsize=(14, 6))
-
         sns.lineplot(data=daily_plot_df, x='Day', y='Max_Tills', label='Max Tills', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Average_Till_Number', label='Average Till', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills (Filtered Hours)', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till per Hour', ax=ax)
-        sns.lineplot(
-            data=daily_plot_df, x='Day', y='Waiting_Time',
-            label='Est. Waiting Time (min)',
-            linestyle='--', linewidth=2.5, marker='o', ax=ax
-        )
+        sns.lineplot(data=daily_plot_df, x='Day', y='Waiting_Time', label='Est. Waiting Time (min)', linestyle='--', linewidth=2.5, marker='o', ax=ax)
 
         ax.set_title(f"Daily Till Metrics ({start_hour}:00 - {end_hour}:00)")
         ax.set_xlabel("Date")
         ax.set_ylabel("Metric Value")
         plt.xticks(rotation=45)
-
-        # Enhanced grid
-        ax.grid(True, which='major', linestyle='-', linewidth=1.0, alpha=0.7, color='gray', zorder=0)
-        ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.4, color='lightgray', zorder=0)
-        ax.minorticks_on()
-        ax.set_axisbelow(True)
-
-        plt.tight_layout()
+        ax.grid(True, which='major', linestyle='-', linewidth=1.0, alpha=0.7, color='gray')
         st.pyplot(fig)
 
-        # -----------------------------
-        # Table with formatting
-        # -----------------------------
         st.subheader("Daily Till Metrics Table")
-
-        styled_df = daily_plot_df.style.format({
-            'Max_Tills': '{:.0f}',
-            'Average_Till_Number': '{:.1f}',
-            'Active_Tills': '{:.0f}',
-            'Customers_Per_Till': '{:.2f}',
-            'Waiting_Time': '{:.2f}'
-        })
-
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(daily_plot_df.style.format({
+            'Max_Tills': '{:.0f}', 'Average_Till_Number': '{:.1f}', 
+            'Active_Tills': '{:.0f}', 'Customers_Per_Till': '{:.2f}', 'Waiting_Time': '{:.2f}'
+        }), use_container_width=True)
 
         # -----------------------------
-        # Loyalty Analysis - Filtered by selected dates
+        # Cashier Performance Metrics
         # -----------------------------
-        st.subheader("Loyalty Customer Insights")
+        st.divider()
+        st.subheader("👨‍🍳 Cashier Performance Metrics")
+
+        if not df_time.empty:
+            cash_counts = df_time.groupby('Cashier').size().reset_index(name='Transaction_Count')
+            loyalty_counts = df_time.groupby(['Cashier', 'Loyalty']).size().reset_index(name='Loyalty_Transaction_Count')
+            unique_tills = df_time.groupby('Cashier')['Till'].nunique().reset_index(name='Unique_Tills_Count')
+
+            fig_cash, axes_cash = plt.subplots(1, 3, figsize=(24, 8))
+            top_10_c = cash_counts.sort_values('Transaction_Count', ascending=False).head(10)
+            
+            sns.barplot(x='Cashier', y='Transaction_Count', data=top_10_c, ax=axes_cash[0], palette='viridis')
+            axes_cash[0].set_title('Top 10 Cashiers by Transactions')
+            axes_cash[0].tick_params(axis='x', rotation=45)
+
+            loyalty_f = loyalty_counts[loyalty_counts['Cashier'].isin(top_10_c['Cashier'])].copy()
+            loyalty_f['Loyalty'] = pd.Categorical(loyalty_f['Loyalty'], categories=['o', 'þ'])
+            sns.barplot(x='Cashier', y='Loyalty_Transaction_Count', hue='Loyalty', data=loyalty_f, ax=axes_cash[1], palette={'o': 'skyblue', 'þ': 'salmon'})
+            axes_cash[1].set_title('Loyalty Breakdown per Cashier')
+            axes_cash[1].tick_params(axis='x', rotation=45)
+
+            tills_f = unique_tills[unique_tills['Cashier'].isin(top_10_c['Cashier'])].sort_values('Unique_Tills_Count', ascending=False)
+            sns.barplot(x='Cashier', y='Unique_Tills_Count', data=tills_f, ax=axes_cash[2], palette='mako')
+            axes_cash[2].set_title('Unique Tills Used')
+            axes_cash[2].tick_params(axis='x', rotation=45)
+
+            plt.tight_layout()
+            st.pyplot(fig_cash)
+
+        # -----------------------------
+        # Customer Analysis
+        # -----------------------------
+        st.divider()
+        st.subheader("🏆 Top Customer Analysis")
+
+        if not df_time.empty:
+            cust_df = df_time[~df_time['Customer'].isin(['<Customer Name>', 'CASH'])].groupby('Customer').agg(
+                Total_Spend=('Total', 'sum'),
+                Frequency=('Rct', 'count')
+            ).reset_index()
+            cust_df['Avg_Basket'] = (cust_df['Total_Spend'] / cust_df['Frequency']).round(2)
+
+            fig_cust, axes_cust = plt.subplots(1, 3, figsize=(24, 8))
+            
+            top_s = cust_df.sort_values('Total_Spend', ascending=False).head(10)
+            sns.barplot(x='Customer', y='Total_Spend', data=top_s, ax=axes_cust[0], palette='crest')
+            axes_cust[0].set_title('Top 10 by Total Spend')
+            axes_cust[0].tick_params(axis='x', rotation=45)
+
+            top_f = cust_df.sort_values('Frequency', ascending=False).head(10)
+            sns.barplot(x='Customer', y='Frequency', data=top_f, ax=axes_cust[1], palette='flare')
+            axes_cust[1].set_title('Top 10 by Frequency')
+            axes_cust[1].tick_params(axis='x', rotation=45)
+
+            top_b = cust_df.sort_values('Avg_Basket', ascending=False).head(10)
+            sns.barplot(x='Customer', y='Avg_Basket', data=top_b, ax=axes_cust[2], palette='magma')
+            axes_cust[2].set_title('Top 10 by Avg Basket')
+            axes_cust[2].tick_params(axis='x', rotation=45)
+
+            plt.tight_layout()
+            st.pyplot(fig_cust)
+
+        # -----------------------------
+        # Loyalty Customer Insights (Fixed & Labeled)
+        # -----------------------------
+        st.divider()
+        st.subheader("💎 Loyalty Customer Insights")
         df_loyalty = df_filtered[df_filtered['Loyalty'].isin(['þ', 'o'])].copy()
 
-        if df_loyalty.empty:
-            st.info("No loyalty data (þ or o) in the selected date range.")
-        else:
+        if not df_loyalty.empty:
             df_loyalty['Loyalty_Category'] = df_loyalty['Loyalty'].map({'þ': 'Loyal', 'o': 'Non-Loyal'})
 
-            # Average spending calculations
-            avg_spending_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Loyal']['Total'].mean()
-            avg_spending_non_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Non-Loyal']['Total'].mean()
-            overall_avg_spending = df_loyalty['Total'].mean()
+            # Fix: Calculate Average Spending including Overall Average
+            avg_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Loyal']['Total'].mean()
+            avg_non = df_loyalty[df_loyalty['Loyalty_Category'] == 'Non-Loyal']['Total'].mean()
+            overall_avg = df_loyalty['Total'].mean()
 
-            # Prepare data for bar plot
-            plot_data = pd.DataFrame({
+            l_plot_data = pd.DataFrame({
                 'Category': ['Loyal Customers', 'Non-Loyal Customers', 'Overall Average'],
-                'Average_Spending': [avg_spending_loyal, avg_spending_non_loyal, overall_avg_spending]
+                'Average_Spending': [avg_loyal, avg_non, overall_avg]
             })
 
-            # Daily transaction counts by loyalty
-            df_loyalty['Day'] = df_loyalty['Date'].dt.date
-            daily_customer_counts = df_loyalty.groupby(['Day', 'Loyalty_Category']).size().reset_index(name='Transaction_Count')
-            daily_customer_counts['Day'] = pd.to_datetime(daily_customer_counts['Day'])
-
-            # Display two plots side by side
             col1, col2 = st.columns(2)
 
             with col1:
-                fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
-                sns.barplot(x='Category', y='Average_Spending', data=plot_data, palette='viridis', ax=ax_bar)
-                ax_bar.set_title('Average Spending by Loyalty Category', fontsize=14)
-                ax_bar.set_xlabel('Customer Category')
-                ax_bar.set_ylabel('Average Spending (KSh)')
-                for i, v in enumerate(plot_data['Average_Spending']):
-                    ax_bar.text(i, v + 0.5, f"{v:.2f}", ha='center', fontsize=10)
-                plt.tight_layout()
-                st.pyplot(fig_bar)
+                fig_l_bar, ax_l_bar = plt.subplots(figsize=(8, 6))
+                sns.barplot(x='Category', y='Average_Spending', data=l_plot_data, palette='viridis', ax=ax_l_bar)
+                ax_l_bar.set_title('Average Spending by Loyalty Category', fontsize=14)
+                ax_l_bar.set_ylabel('Average Spending (KSh)')
+                # Add data labels on bars
+                for i, v in enumerate(l_plot_data['Average_Spending']):
+                    ax_l_bar.text(i, v + (v * 0.02), f"{v:.2f}", ha='center', fontweight='bold')
+                st.pyplot(fig_l_bar)
 
             with col2:
-                fig_daily, ax_daily = plt.subplots(figsize=(8, 5))
-                sns.barplot(data=daily_customer_counts, x='Day', y='Transaction_Count', hue='Loyalty_Category', ax=ax_daily)
-                ax_daily.set_title('Daily Transactions by Loyalty Category', fontsize=14)
-                ax_daily.set_xlabel('Date')
-                ax_daily.set_ylabel('Number of Transactions')
+                df_loyalty['Day_Plot'] = pd.to_datetime(df_loyalty['Date'].dt.date)
+                daily_counts = df_loyalty.groupby(['Day_Plot', 'Loyalty_Category']).size().reset_index(name='Count')
+                fig_l_daily, ax_l_daily = plt.subplots(figsize=(8, 6))
+                sns.barplot(data=daily_counts, x='Day_Plot', y='Count', hue='Loyalty_Category', ax=ax_l_daily)
+                ax_l_daily.set_title('Daily Transactions by Category', fontsize=14)
                 plt.xticks(rotation=45)
-                plt.legend(title='Category')
-                plt.tight_layout()
-                st.pyplot(fig_daily)
+                st.pyplot(fig_l_daily)
+        else:
+            st.info("No loyalty data found for the selected dates.")
 
 else:
     st.info("Please upload your rk.csv file to begin.")
-
-
-
