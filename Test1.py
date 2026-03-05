@@ -114,36 +114,42 @@ if uploaded_file is not None:
         }), use_container_width=True)
 
         # -----------------------------
-        # Cashier Performance Metrics
+        # Cashier Performance Metrics (Full Analysis)
         # -----------------------------
         st.divider()
-        st.subheader("👨‍🍳 Cashier Performance Metrics")
+        st.subheader("👨‍🍳 Full Cashier Performance Analysis")
 
         if not df_time.empty:
-            cash_counts = df_time.groupby('Cashier').size().reset_index(name='Transaction_Count')
+            cash_counts = df_time.groupby('Cashier').size().reset_index(name='Transaction_Count').sort_values('Transaction_Count', ascending=False)
             loyalty_counts = df_time.groupby(['Cashier', 'Loyalty']).size().reset_index(name='Loyalty_Transaction_Count')
             unique_tills = df_time.groupby('Cashier')['Till'].nunique().reset_index(name='Unique_Tills_Count')
 
-            fig_cash, axes_cash = plt.subplots(1, 3, figsize=(24, 8))
-            top_10_c = cash_counts.sort_values('Transaction_Count', ascending=False).head(10)
+            # Dynamic figure height based on number of cashiers to prevent overlap
+            fig_height = max(8, len(cash_counts) * 0.4)
+            fig_cash, axes_cash = plt.subplots(1, 3, figsize=(24, fig_height))
             
-            sns.barplot(x='Cashier', y='Transaction_Count', data=top_10_c, ax=axes_cash[0], palette='viridis')
-            axes_cash[0].set_title('Top 10 Cashiers by Transactions')
-            axes_cash[0].tick_params(axis='x', rotation=45)
+            # --- Plot 1: All Cashiers by Transactions ---
+            sns.barplot(x='Transaction_Count', y='Cashier', data=cash_counts, ax=axes_cash[0], palette='viridis')
+            axes_cash[0].set_title('Transactions per Cashier')
 
-            loyalty_f = loyalty_counts[loyalty_counts['Cashier'].isin(top_10_c['Cashier'])].copy()
+            # --- Plot 2: Loyalty Breakdown for All Cashiers ---
+            loyalty_f = loyalty_counts.copy()
             loyalty_f['Loyalty'] = pd.Categorical(loyalty_f['Loyalty'], categories=['o', 'þ'])
-            sns.barplot(x='Cashier', y='Loyalty_Transaction_Count', hue='Loyalty', data=loyalty_f, ax=axes_cash[1], palette={'o': 'skyblue', 'þ': 'salmon'})
-            axes_cash[1].set_title('Loyalty Breakdown per Cashier')
-            axes_cash[1].tick_params(axis='x', rotation=45)
+            # Sort by total transaction count for consistency
+            order = cash_counts['Cashier'].tolist()
+            sns.barplot(x='Loyalty_Transaction_Count', y='Cashier', hue='Loyalty', data=loyalty_f, ax=axes_cash[1], palette={'o': 'skyblue', 'þ': 'salmon'}, order=order)
+            axes_cash[1].set_title('Loyalty Breakdown')
+            axes_cash[1].legend(title='Loyalty Type')
 
-            tills_f = unique_tills[unique_tills['Cashier'].isin(top_10_c['Cashier'])].sort_values('Unique_Tills_Count', ascending=False)
-            sns.barplot(x='Cashier', y='Unique_Tills_Count', data=tills_f, ax=axes_cash[2], palette='mako')
+            # --- Plot 3: Unique Tills for All Cashiers ---
+            tills_f = unique_tills.sort_values('Unique_Tills_Count', ascending=False)
+            sns.barplot(x='Unique_Tills_Count', y='Cashier', data=tills_f, ax=axes_cash[2], palette='mako', order=order)
             axes_cash[2].set_title('Unique Tills Used')
-            axes_cash[2].tick_params(axis='x', rotation=45)
 
             plt.tight_layout()
             st.pyplot(fig_cash)
+        else:
+            st.info("No data available for the selected range to show Cashier Metrics.")
 
         # -----------------------------
         # Customer Analysis
@@ -179,7 +185,7 @@ if uploaded_file is not None:
             st.pyplot(fig_cust)
 
         # -----------------------------
-        # Loyalty Customer Insights (Fixed & Labeled)
+        # Loyalty Customer Insights
         # -----------------------------
         st.divider()
         st.subheader("💎 Loyalty Customer Insights")
@@ -188,7 +194,6 @@ if uploaded_file is not None:
         if not df_loyalty.empty:
             df_loyalty['Loyalty_Category'] = df_loyalty['Loyalty'].map({'þ': 'Loyal', 'o': 'Non-Loyal'})
 
-            # Fix: Calculate Average Spending including Overall Average
             avg_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Loyal']['Total'].mean()
             avg_non = df_loyalty[df_loyalty['Loyalty_Category'] == 'Non-Loyal']['Total'].mean()
             overall_avg = df_loyalty['Total'].mean()
@@ -205,7 +210,6 @@ if uploaded_file is not None:
                 sns.barplot(x='Category', y='Average_Spending', data=l_plot_data, palette='viridis', ax=ax_l_bar)
                 ax_l_bar.set_title('Average Spending by Loyalty Category', fontsize=14)
                 ax_l_bar.set_ylabel('Average Spending (KSh)')
-                # Add data labels on bars
                 for i, v in enumerate(l_plot_data['Average_Spending']):
                     ax_l_bar.text(i, v + (v * 0.02), f"{v:.2f}", ha='center', fontweight='bold')
                 st.pyplot(fig_l_bar)
