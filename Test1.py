@@ -1,196 +1,178 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-from datetime import datetime
 
-# ────────────────────────────────────────────────
-# Page config
-# ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Loyal Customer Dashboard",
-    page_icon="🛒",
-    layout="wide"
-)
+st.set_page_config(page_title="Store Traffic Dashboard", layout="wide")
 
-st.title("Loyal Customer Analysis Dashboard")
-st.markdown("This dashboard shows insights from POS receipt data (Jan–Mar 2026)")
+# Hide Streamlit header/menu
+hide_streamlit_style = """
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# ────────────────────────────────────────────────
-# 1. File uploader (so you can upload pp.csv or similar)
-# ────────────────────────────────────────────────
-uploaded_file = st.file_uploader("Upload your POS data CSV (pp.csv format)", type=["csv"])
+st.title("📊 Store Traffic & Till Performance Dashboard")
+
+# -----------------------------
+# Upload CSV
+# -----------------------------
+uploaded_file = st.file_uploader("Upload rk.csv file", type=["csv"])
 
 if uploaded_file is not None:
-    # ────────────────────────────────────────────────
-    # 2. Load and clean data (mirroring your notebook)
-    # ────────────────────────────────────────────────
-    with st.spinner("Loading and cleaning data..."):
-        df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(uploaded_file)
 
-        # Drop useless header-like rows & reset index
-        df = df[df['Date Time'].str.contains(r'\d{2}/\d{2}/\d{4}', na=False, regex=True)].copy()
-        df.reset_index(drop=True, inplace=True)
+    # -----------------------------
+    # Clean Data
+    # -----------------------------
+    cols_to_delete = list(range(0, 10)) + list(range(18, 22))
+    df_cleaned = df.drop(df.columns[cols_to_delete], axis=1)
+    new_names = ["Date", "Till", "Session", "Rct", "Customer", "Total", "Loyalty", "Cashier"]
+    df_cleaned.columns = new_names
 
-        # Select only the meaningful columns (based on your cleaning steps)
-        keep_cols = [
-            'Date Time', 'Till', 'Session', 'Rct',
-            'Customer', 'Total', 'Loyalty', 'Cashier'
-        ]
-        # Adjust if column names are slightly different after read_csv
-        available_cols = [c for c in keep_cols if c in df.columns]
-        df_clean = df[available_cols].copy()
+    df_cleaned['Date'] = pd.to_datetime(df_cleaned['Date'], dayfirst=True, errors='coerce')
+    # Clean 'Total' globally first to ensure consistency
+    df_cleaned['Total'] = df_cleaned['Total'].astype(str).str.replace(',', '').astype(float)
+    df_cleaned = df_cleaned.dropna(subset=['Date'])
 
-        # Rename for consistency
-        df_clean = df_clean.rename(columns={
-            'Date Time': 'Date',
-            'Rct': 'Receipt',
-        })
+    # -----------------------------
+    # Sidebar Filters
+    # -----------------------------
+    min_date = df_cleaned['Date'].min().date()
+    max_date = df_cleaned['Date'].max().date()
 
-        # Convert Date → datetime
-        df_clean['Date'] = pd.to_datetime(df_clean['Date'], format='%d/%m/%Y %H:%M', errors='coerce')
+    st.sidebar.header("Filters")
+    start_date = st.sidebar.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
+    end_date = st.sidebar.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
+    start_hour = st.sidebar.slider("Start Hour", 0, 23, 0)
+    end_hour = st.sidebar.slider("End Hour", 0, 23, 23)
 
-        # Clean Total column (remove commas, convert to float)
-        df_clean['Total'] = df_clean['Total'].astype(str).str.replace(',', '').astype(float)
+    # -----------------------------
+    # Filter Data (main)
+    # -----------------------------
+    df_filtered = df_cleaned[
+        (df_cleaned['Date'].dt.date >= start_date) &
+        (df_cleaned['Date'].dt.date <= end_date)
+    ].copy()
 
-        # Filter only rows that look like real transactions
-        df_clean = df_clean[df_clean['Total'] > 0].copy()
-
-        # Add useful derived columns
-        df_clean['Date_only']     = df_clean['Date'].dt.date
-        df_clean['Day_of_Week']   = df_clean['Date'].dt.day_name()
-        df_clean['Month']         = df_clean['Date'].dt.month
-        df_clean['Year']          = df_clean['Date'].dt.year
-        df_clean['Hour']          = df_clean['Date'].dt.hour
-
-    st.success(f"Loaded {len(df_clean):,} valid transactions!")
-
-    # ────────────────────────────────────────────────
-    # 3. Identify Loyal Customers
-    #    (simple definition: appeared ≥ 5 times OR spent ≥ some threshold)
-    # ────────────────────────────────────────────────
-    MIN_TRANSACTIONS = 5
-    MIN_SPEND        = 10000  # KES – adjust as needed
-
-    loyal_customers = (
-        df_clean.groupby('Customer')
-        .agg(
-            Transaction_Count=('Receipt', 'nunique'),
-            Total_Spending=('Total', 'sum'),
-            First_Date=('Date', 'min'),
-            Last_Date=('Date', 'max'),
-            Avg_Basket_Value=('Total', 'mean')
-        )
-        .reset_index()
-    )
-
-    # Filter loyal
-    loyal_customers = loyal_customers[
-        (loyal_customers['Transaction_Count'] >= MIN_TRANSACTIONS) |
-        (loyal_customers['Total_Spending'] >= MIN_SPEND)
-    ].sort_values('Total_Spending', ascending=False)
-
-    st.subheader("Loyal Customers Overview")
-    st.dataframe(
-        loyal_customers.style.format({
-            'Total_Spending':    '{:,.0f}',
-            'Avg_Basket_Value':  '{:,.0f}',
-            'First_Date':        '{:%Y-%m-%d}',
-            'Last_Date':         '{:%Y-%m-%d}'
-        }),
-        use_container_width=True
-    )
-
-    # ────────────────────────────────────────────────
-    # 4. Prepare data for your requested plots
-    # ────────────────────────────────────────────────
-    top_loyal_metrics_filtered = loyal_customers.head(15).copy()   # top 15 spenders
-
-    # Daily pattern (all loyal customers' transactions)
-    transactions_by_day = (
-        df_clean[df_clean['Customer'].isin(loyal_customers['Customer'])]
-        .groupby('Day_of_Week')
-        .agg(Transaction_Count=('Receipt', 'nunique'))
-        .reset_index()
-    )
-
-    day_order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-    transactions_by_day['Day_of_Week'] = pd.Categorical(
-        transactions_by_day['Day_of_Week'], categories=day_order, ordered=True
-    )
-    transactions_by_day = transactions_by_day.sort_values('Day_of_Week')
-
-    # ────────────────────────────────────────────────
-    # 5. Your requested visualization – two subplots
-    # ────────────────────────────────────────────────
-    st.subheader("Selected Loyal Customer Analysis with Detailed Metrics")
-
-    fig, axes = plt.subplots(2, 1, figsize=(14, 16), sharex=False)
-    fig.suptitle('Selected Loyal Customer Analysis with Detailed Metrics', fontsize=20, y=1.02)
-
-    # Plot 1: Total Spending (horizontal bar)
-    if not top_loyal_metrics_filtered.empty:
-        sns.barplot(
-            ax=axes[0],
-            x='Total_Spending',
-            y='Customer',
-            data=top_loyal_metrics_filtered,
-            palette='magma',
-            hue='Customer',
-            legend=False
-        )
-        axes[0].set_title('Total Loyal Customers by Total Spending', fontsize=14)
-        axes[0].set_xlabel('Total Spending (KES)')
-        axes[0].set_ylabel('Customer')
-        axes[0].grid(axis='x', linestyle='--', alpha=0.7)
-
-        for index, row in top_loyal_metrics_filtered.iterrows():
-            text = (
-                f"Total: {row['Total_Spending']:,.0f}\n"
-                f"BV: {row['Avg_Basket_Value']:,.0f}\n"
-                f"Freq: {row['Transaction_Count']:,}"
-            )
-            axes[0].text(
-                row['Total_Spending'], index,
-                text, color='black', ha='left', va='center', fontsize=9
-            )
+    if df_filtered.empty:
+        st.warning("No data for selected date range")
     else:
-        axes[0].text(0.5, 0.5, 'No loyal customer data', ha='center', va='center', fontsize=14, color='red')
-        axes[0].axis('off')
+        df_filtered['Day'] = df_filtered['Date'].dt.date
+        daily_max_tills = df_filtered.groupby('Day')['Till'].nunique().reset_index(name='Max_Tills')
 
-    # Plot 2: Transactions by Day of Week
-    if not transactions_by_day.empty:
-        sns.barplot(
-            ax=axes[1],
-            x='Transaction_Count',
-            y='Day_of_Week',
-            data=transactions_by_day,
-            palette='cubehelix',
-            hue='Day_of_Week',
-            legend=False
-        )
-        axes[1].set_title('Loyal Customer Shopping Patterns by Day of the Week', fontsize=14)
-        axes[1].set_xlabel('Number of Transactions')
-        axes[1].set_ylabel('Day of the Week')
-        axes[1].grid(axis='x', linestyle='--', alpha=0.7)
+        df_time = df_filtered[
+            (df_filtered['Date'].dt.hour >= start_hour) &
+            (df_filtered['Date'].dt.hour <= end_hour)
+        ].copy()
 
-        for index, row in transactions_by_day.iterrows():
-            axes[1].text(
-                row['Transaction_Count'], index,
-                f"{row['Transaction_Count']:,}",
-                color='black', ha='left', va='center', fontsize=10
+        if not df_time.empty:
+            daily_metrics = df_time.groupby('Day').agg(
+                Average_Till_Number=('Till', 'mean'),
+                Active_Tills=('Till', 'nunique'),
+                Daily_Rows_Count=('Till', 'size')
+            ).reset_index()
+
+            duration = max((end_hour - start_hour + 1), 1)
+            daily_metrics['Customers_Per_Till'] = (
+                daily_metrics['Daily_Rows_Count'] /
+                (daily_metrics['Active_Tills'] * duration)
             )
-    else:
-        axes[1].text(0.5, 0.5, 'No daily pattern data', ha='center', va='center', fontsize=14, color='red')
-        axes[1].axis('off')
+            
+            daily_plot_df = pd.merge(daily_max_tills, daily_metrics, on='Day', how='left')
+            daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.98])
-    st.pyplot(fig)
+            # Calculate Waiting Time
+            daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 40
+            daily_plot_df['Customers_Per_Till'] = daily_plot_df['Customers_Per_Till'].round(2)
+            daily_plot_df['Waiting_Time'] = daily_plot_df['Waiting_Time'].round(2)
+
+            # -----------------------------
+            # Main Plot: Daily Till Metrics
+            # -----------------------------
+            fig, ax = plt.subplots(figsize=(14, 6))
+            sns.lineplot(data=daily_plot_df, x='Day', y='Max_Tills', label='Max Tills', ax=ax)
+            sns.lineplot(data=daily_plot_df, x='Day', y='Average_Till_Number', label='Average Till', ax=ax)
+            sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills (Filtered Hours)', ax=ax)
+            sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till per Hour', ax=ax)
+            sns.lineplot(data=daily_plot_df, x='Day', y='Waiting_Time', label='Est. Waiting Time (min)', linestyle='--', linewidth=2.5, marker='o', ax=ax)
+
+            ax.set_title(f"Daily Till Metrics ({start_hour}:00 - {end_hour}:00)")
+            plt.xticks(rotation=45)
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+
+            # Table
+            st.subheader("Daily Till Metrics Table")
+            st.dataframe(daily_plot_df.style.format({'Max_Tills': '{:.0f}', 'Average_Till_Number': '{:.1f}', 'Active_Tills': '{:.0f}', 'Customers_Per_Till': '{:.2f}', 'Waiting_Time': '{:.2f}'}), use_container_width=True)
+
+            # -----------------------------
+            # NEW: Top Loyal Customers Analysis (Filtered)
+            # -----------------------------
+            st.divider()
+            st.subheader("🏆 Top Loyal Customers Shopping Patterns")
+            
+            # Using the filtered time dataframe to respect date/hour sliders
+            loyal_customers_df = df_time[df_time['Loyalty'] == 'þ'].copy()
+            
+            if not loyal_customers_df.empty:
+                customer_summary = loyal_customers_df.groupby('Customer').agg(
+                    Value=('Total', 'sum'),
+                    Frequency=('Rct', 'count')
+                ).reset_index()
+                customer_summary['Basket Value'] = customer_summary['Value'] / customer_summary['Frequency']
+
+                # Filter out placeholder/generic names if necessary
+                customer_summary_filtered = customer_summary[customer_summary['Customer'] != '<Customer Name>']
+
+                fig_loyal, axes = plt.subplots(1, 3, figsize=(24, 7))
+                
+                # Plot 1: Top 10 by Value
+                top_value = customer_summary_filtered.sort_values(by='Value', ascending=False).head(10)
+                sns.barplot(x='Customer', y='Value', data=top_value, ax=axes[0], palette='viridis')
+                axes[0].set_title('Top 10 Customers by Value')
+                axes[0].tick_params(axis='x', rotation=45)
+
+                # Plot 2: Top 10 by Frequency
+                top_freq = customer_summary_filtered.sort_values(by='Frequency', ascending=False).head(10)
+                sns.barplot(x='Customer', y='Frequency', data=top_freq, ax=axes[1], palette='magma')
+                axes[1].set_title('Top 10 Customers by Frequency')
+                axes[1].tick_params(axis='x', rotation=45)
+
+                # Plot 3: Top 10 by Basket Value
+                top_basket = customer_summary_filtered.sort_values(by='Basket Value', ascending=False).head(10)
+                sns.barplot(x='Customer', y='Basket Value', data=top_basket, ax=axes[2], palette='cividis')
+                axes[2].set_title('Top 10 Customers by Basket Value')
+                axes[2].tick_params(axis='x', rotation=45)
+
+                plt.tight_layout()
+                st.pyplot(fig_loyal)
+            else:
+                st.info("No loyal customers (þ) found for the selected time period.")
+
+            # -----------------------------
+            # Existing Loyalty Category Insights
+            # -----------------------------
+            st.subheader("Loyalty Customer Insights (Broad)")
+            df_loyalty = df_filtered[df_filtered['Loyalty'].isin(['þ', 'o'])].copy()
+            if not df_loyalty.empty:
+                df_loyalty['Loyalty_Category'] = df_loyalty['Loyalty'].map({'þ': 'Loyal', 'o': 'Non-Loyal'})
+                col1, col2 = st.columns(2)
+                # ... [Existing Loyalty plots code continues here] ...
+                with col1:
+                    avg_data = df_loyalty.groupby('Loyalty_Category')['Total'].mean().reset_index()
+                    fig_bar, ax_bar = plt.subplots()
+                    sns.barplot(x='Loyalty_Category', y='Total', data=avg_data, palette='viridis', ax=ax_bar)
+                    st.pyplot(fig_bar)
+                with col2:
+                    df_loyalty['Day'] = pd.to_datetime(df_loyalty['Date'].dt.date)
+                    counts = df_loyalty.groupby(['Day', 'Loyalty_Category']).size().reset_index(name='Count')
+                    fig_daily, ax_daily = plt.subplots()
+                    sns.barplot(data=counts, x='Day', y='Count', hue='Loyalty_Category', ax=ax_daily)
+                    plt.xticks(rotation=45)
+                    st.pyplot(fig_daily)
 
 else:
-    st.info("Please upload your POS CSV file (pp.csv or similar format) to start the analysis.")
-
-st.markdown("---")
-st.caption(f"Dashboard last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EAT')}")
+    st.info("Please upload your rk.csv file to begin.")
