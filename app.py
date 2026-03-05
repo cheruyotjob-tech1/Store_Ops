@@ -86,7 +86,7 @@ if uploaded_file is not None:
         daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
         # Calculate Waiting Time
-        daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 50
+        daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 40
 
         # Round numbers for clean display
         daily_plot_df['Customers_Per_Till'] = daily_plot_df['Customers_Per_Till'].round(2)
@@ -192,3 +192,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload your rk.csv file to begin.")
+
