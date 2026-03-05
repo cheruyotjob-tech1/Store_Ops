@@ -117,7 +117,7 @@ if uploaded_file is not None:
         # Cashier Performance Metrics (Full Analysis)
         # -----------------------------
         st.divider()
-        st.subheader("👨‍🍳 Full Cashier Performance Analysis")
+        st.subheader("Full Cashier Performance Analysis")
 
         if not df_time.empty:
             cash_counts = df_time.groupby('Cashier').size().reset_index(name='Transaction_Count').sort_values('Transaction_Count', ascending=False)
@@ -227,3 +227,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload your rk.csv file to begin.")
+
