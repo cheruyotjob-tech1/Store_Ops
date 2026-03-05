@@ -14,7 +14,7 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-st.title("📊 Front-End Transactions Intelligence")
+st.title("📊 Store Traffic & Till Performance Dashboard")
 
 # -----------------------------
 # Upload CSV
@@ -105,11 +105,6 @@ if uploaded_file is not None:
         ax.grid(True, which='major', linestyle='-', linewidth=1.0, alpha=0.7, color='gray')
         st.pyplot(fig)
 
-        st.subheader("Daily Till Metrics Table")
-        st.dataframe(daily_plot_df.style.format({
-            'Max_Tills': '{:.0f}', 'Average_Till_Number': '{:.1f}', 
-            'Active_Tills': '{:.0f}', 'Customers_Per_Till': '{:.2f}', 'Waiting_Time': '{:.2f}'
-        }), use_container_width=True)
 
         # -----------------------------
         # NEW: Specific Customer Pattern Search (Streamlit Version)
@@ -240,6 +235,3 @@ if uploaded_file is not None:
                 st.pyplot(fig_l_daily)
 else:
     st.info("Please upload your rk.csv file to begin.")
-
-
-
