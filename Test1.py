@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 st.set_page_config(page_title="Store Traffic Dashboard", layout="wide")
 
@@ -47,19 +48,8 @@ if uploaded_file is not None:
 
     st.sidebar.header("Filters")
 
-    start_date = st.sidebar.date_input(
-        "Start Date",
-        min_date,
-        min_value=min_date,
-        max_value=max_date
-    )
-
-    end_date = st.sidebar.date_input(
-        "End Date",
-        max_date,
-        min_value=min_date,
-        max_value=max_date
-    )
+    start_date = st.sidebar.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
+    end_date = st.sidebar.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
 
     start_hour = st.sidebar.slider("Start Hour", 0, 23, 0)
     end_hour = st.sidebar.slider("End Hour", 0, 23, 23)
@@ -102,11 +92,9 @@ if uploaded_file is not None:
             )
 
         else:
-
             daily_metrics = pd.DataFrame()
 
         daily_plot_df = pd.merge(daily_max_tills, daily_metrics, on='Day', how='left')
-
         daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
         # Waiting time estimation
@@ -122,14 +110,14 @@ if uploaded_file is not None:
 
         sns.lineplot(data=daily_plot_df, x='Day', y='Max_Tills', label='Max Tills', ax=ax)
         sns.lineplot(data=daily_plot_df, x='Day', y='Average_Till_Number', label='Average Till', ax=ax)
-        sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills (Filtered Hours)', ax=ax)
-        sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till per Hour', ax=ax)
+        sns.lineplot(data=daily_plot_df, x='Day', y='Active_Tills', label='Active Tills', ax=ax)
+        sns.lineplot(data=daily_plot_df, x='Day', y='Customers_Per_Till', label='Customers per Till', ax=ax)
 
         sns.lineplot(
             data=daily_plot_df,
             x='Day',
             y='Waiting_Time',
-            label='Est. Waiting Time (min)',
+            label='Waiting Time (min)',
             linestyle='--',
             linewidth=2.5,
             marker='o',
@@ -141,31 +129,16 @@ if uploaded_file is not None:
         ax.set_ylabel("Metric Value")
 
         plt.xticks(rotation=45)
-
-        ax.grid(True, which='major', linestyle='-', linewidth=1, alpha=0.7)
-        ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.4)
-
-        ax.minorticks_on()
-        ax.set_axisbelow(True)
-
         plt.tight_layout()
 
         st.pyplot(fig)
 
         # -----------------------------
-        # Data Table
+        # Table
         # -----------------------------
         st.subheader("Daily Till Metrics Table")
 
-        styled_df = daily_plot_df.style.format({
-            'Max_Tills': '{:.0f}',
-            'Average_Till_Number': '{:.1f}',
-            'Active_Tills': '{:.0f}',
-            'Customers_Per_Till': '{:.2f}',
-            'Waiting_Time': '{:.2f}'
-        })
-
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(daily_plot_df, use_container_width=True)
 
         # -----------------------------
         # Loyalty Analysis
@@ -176,136 +149,122 @@ if uploaded_file is not None:
 
         if df_loyalty.empty:
 
-            st.info("No loyalty data in the selected date range.")
+            st.info("No loyalty data available.")
 
         else:
 
-            df_loyalty['Loyalty_Category'] = df_loyalty['Loyalty'].map({
-                'þ': 'Loyal',
-                'o': 'Non-Loyal'
-            })
-
-            avg_spending_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Loyal']['Total'].mean()
-            avg_spending_non_loyal = df_loyalty[df_loyalty['Loyalty_Category'] == 'Non-Loyal']['Total'].mean()
-            overall_avg_spending = df_loyalty['Total'].mean()
-
-            plot_data = pd.DataFrame({
-                'Category': ['Loyal Customers', 'Non-Loyal Customers', 'Overall Average'],
-                'Average_Spending': [
-                    avg_spending_loyal,
-                    avg_spending_non_loyal,
-                    overall_avg_spending
-                ]
-            })
-
-            df_loyalty['Day'] = df_loyalty['Date'].dt.date
-
-            daily_customer_counts = df_loyalty.groupby(
-                ['Day', 'Loyalty_Category']
-            ).size().reset_index(name='Transaction_Count')
-
-            daily_customer_counts['Day'] = pd.to_datetime(daily_customer_counts['Day'])
-
-            col1, col2 = st.columns(2)
-
-            # -----------------------------
-            # Average Spending Plot
-            # -----------------------------
-            with col1:
-
-                fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
-
-                sns.barplot(
-                    x='Category',
-                    y='Average_Spending',
-                    data=plot_data,
-                    palette='viridis',
-                    ax=ax_bar
-                )
-
-                ax_bar.set_title('Average Spending by Loyalty Category')
-                ax_bar.set_xlabel('Customer Category')
-                ax_bar.set_ylabel('Average Spending (KSh)')
-
-                for i, v in enumerate(plot_data['Average_Spending']):
-                    ax_bar.text(i, v + 1, f"{v:.2f}", ha='center')
-
-                plt.tight_layout()
-
-                st.pyplot(fig_bar)
-
-            # -----------------------------
-            # Daily Transactions Plot
-            # -----------------------------
-            with col2:
-
-                fig_daily, ax_daily = plt.subplots(figsize=(8, 5))
-
-                sns.barplot(
-                    data=daily_customer_counts,
-                    x='Day',
-                    y='Transaction_Count',
-                    hue='Loyalty_Category',
-                    ax=ax_daily
-                )
-
-                ax_daily.set_title('Daily Transactions by Loyalty Category')
-                ax_daily.set_xlabel('Date')
-                ax_daily.set_ylabel('Transactions')
-
-                plt.xticks(rotation=45)
-
-                plt.tight_layout()
-
-                st.pyplot(fig_daily)
-
-            # -----------------------------
-            # Day of Week Shopping Pattern
-            # -----------------------------
-            st.subheader("Loyal Customer Shopping Patterns by Day of the Week")
-
             df_loyalty['Day_of_Week'] = df_loyalty['Date'].dt.day_name()
 
+            # -----------------------------
+            # Loyal Customer Metrics
+            # -----------------------------
+            loyal_only = df_loyalty[df_loyalty['Loyalty'] == 'þ']
+
+            top_loyal_metrics = loyal_only.groupby('Customer').agg(
+                Total_Spending=('Total', 'sum'),
+                Transaction_Count=('Total', 'count'),
+                Basket_Value=('Total', 'mean')
+            ).reset_index()
+
+            top_loyal_metrics_filtered = top_loyal_metrics.sort_values(
+                'Total_Spending', ascending=False
+            ).head(10)
+
+            # -----------------------------
+            # Transactions by Day
+            # -----------------------------
             transactions_by_day = df_loyalty.groupby(
                 'Day_of_Week'
             ).size().reset_index(name='Transaction_Count')
 
-            days_order = [
-                'Monday','Tuesday','Wednesday',
-                'Thursday','Friday','Saturday','Sunday'
-            ]
+            # -----------------------------
+            # Plot Loyal Customer Analysis
+            # -----------------------------
+            fig, axes = plt.subplots(2, 1, figsize=(14, 16))
 
-            transactions_by_day['Day_of_Week'] = pd.Categorical(
-                transactions_by_day['Day_of_Week'],
-                categories=days_order,
-                ordered=True
+            fig.suptitle(
+                'Selected Loyal Customer Analysis with Detailed Metrics',
+                fontsize=20,
+                y=1.02
             )
 
-            transactions_by_day = transactions_by_day.sort_values('Day_of_Week')
+            # --- Plot 1 ---
+            if not top_loyal_metrics_filtered.empty:
 
-            fig_week, ax_week = plt.subplots(figsize=(12, 6))
+                sns.barplot(
+                    ax=axes[0],
+                    x='Total_Spending',
+                    y='Customer',
+                    data=top_loyal_metrics_filtered,
+                    palette='magma',
+                    hue='Customer',
+                    legend=False
+                )
 
-            sns.barplot(
-                x='Day_of_Week',
-                y='Transaction_Count',
-                data=transactions_by_day,
-                palette='viridis',
-                hue='Day_of_Week',
-                legend=False,
-                ax=ax_week
-            )
+                axes[0].set_title('Total Loyal Customers by Total Spending')
+                axes[0].set_xlabel('Total Spending')
+                axes[0].set_ylabel('Customer')
 
-            ax_week.set_title('Loyal Customer Shopping Patterns by Day of the Week')
-            ax_week.set_xlabel('Day of the Week')
-            ax_week.set_ylabel('Number of Transactions')
+                for index, row in top_loyal_metrics_filtered.iterrows():
 
-            plt.xticks(rotation=45)
+                    text = (
+                        f"Total: {row['Total_Spending']:,.2f}\n"
+                        f"BV: {row['Basket_Value']:,.2f}\n"
+                        f"Freq: {row['Transaction_Count']:,.0f}"
+                    )
 
-            ax_week.grid(axis='y', linestyle='--', alpha=0.7)
+                    axes[0].text(
+                        row['Total_Spending'],
+                        index,
+                        text,
+                        ha='left',
+                        va='center',
+                        fontsize=9
+                    )
 
-            plt.tight_layout()
+            # --- Plot 2 ---
+            if not transactions_by_day.empty:
 
-            st.pyplot(fig_week)
+                day_order = [
+                    'Monday','Tuesday','Wednesday',
+                    'Thursday','Friday','Saturday','Sunday'
+                ]
+
+                transactions_by_day['Day_of_Week'] = pd.Categorical(
+                    transactions_by_day['Day_of_Week'],
+                    categories=day_order,
+                    ordered=True
+                )
+
+                transactions_by_day = transactions_by_day.sort_values('Day_of_Week')
+
+                sns.barplot(
+                    ax=axes[1],
+                    x='Transaction_Count',
+                    y='Day_of_Week',
+                    data=transactions_by_day,
+                    palette='cubehelix',
+                    hue='Day_of_Week',
+                    legend=False
+                )
+
+                axes[1].set_title('Loyal Customer Shopping Patterns by Day of the Week')
+                axes[1].set_xlabel('Number of Transactions')
+                axes[1].set_ylabel('Day of the Week')
+
+                for index, row in transactions_by_day.iterrows():
+
+                    axes[1].text(
+                        row['Transaction_Count'],
+                        index,
+                        f"{row['Transaction_Count']:,.0f}",
+                        ha='left',
+                        va='center'
+                    )
+
+            plt.tight_layout(rect=[0,0.03,1,0.98])
+
+            st.pyplot(fig)
 
 else:
 
