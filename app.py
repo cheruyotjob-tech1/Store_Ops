@@ -150,7 +150,7 @@ if uploaded_file is not None:
         # Cashier Performance Metrics
         # -----------------------------
         st.divider()
-        st.subheader("👨‍🍳 Full Cashier Performance Analysis")
+        st.subheader("Cashier Performance Analysis")
 
         if not df_time.empty:
             cash_counts = df_time.groupby('Cashier').size().reset_index(name='Transaction_Count').sort_values('Transaction_Count', ascending=False)
@@ -165,7 +165,7 @@ if uploaded_file is not None:
             loyalty_f = loyalty_counts.copy()
             loyalty_f['Loyalty'] = pd.Categorical(loyalty_f['Loyalty'], categories=['o', 'þ'])
             order = cash_counts['Cashier'].tolist()
-            sns.barplot(x='Loyalty_Transaction_Count', y='Cashier', hue='Loyalty', data=loyalty_f, ax=axes_cash[1], palette={'o': 'skyblue', 'þ': 'salmon'}, order=order)
+            sns.barplot(x='Loyalty_Transaction_Count', y='Cashier', hue='Loyalty', data=loyalty_f, ax=axes_cash[1], palette={'o': 'salmon', 'þ': 'skyblue'}, order=order)
             axes_cash[1].set_title('Loyalty Breakdown')
             axes_cash[1].legend(title='Loyalty Type')
 
@@ -235,3 +235,4 @@ if uploaded_file is not None:
                 st.pyplot(fig_l_daily)
 else:
     st.info("Please upload your rk.csv file to begin.")
+
