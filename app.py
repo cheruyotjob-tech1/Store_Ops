@@ -14,7 +14,7 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-st.title("📊 Store Traffic & Till Performance Dashboard")
+st.title("Checkout Performance Intelligence ")
 
 # -----------------------------
 # Upload CSV
@@ -235,4 +235,5 @@ if uploaded_file is not None:
                 st.pyplot(fig_l_daily)
 else:
     st.info("Please upload your rk.csv file to begin.")
+
 
