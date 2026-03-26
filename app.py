@@ -86,7 +86,7 @@ if uploaded_file is not None:
         daily_plot_df['Day'] = pd.to_datetime(daily_plot_df['Day'])
 
         # Calculate Waiting Time
-        daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 30
+        daily_plot_df['Waiting_Time'] = (daily_plot_df['Customers_Per_Till'] * 10) / 15
         daily_plot_df['Customers_Per_Till'] = daily_plot_df['Customers_Per_Till'].round(2)
         daily_plot_df['Waiting_Time'] = daily_plot_df['Waiting_Time'].round(2)
 
